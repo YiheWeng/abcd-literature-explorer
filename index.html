@@ -279,6 +279,19 @@ canvas.netcanvas { width:100%; height:100%; }
 .paper-keyword-chip:hover,.paper-keyword-chip:focus-visible{border-color:#4fc3f7;background:#15344b;color:#d9f2ff}
 #keyword-directory-search{margin-left:auto;min-width:160px;width:230px;max-width:32%;background:#0d1b2a;color:#d5e6ef;border:1px solid #28506b;border-radius:5px;padding:7px 10px;font-size:11px}
 @media(max-width:700px){#keyword-directory-search{width:145px;min-width:100px;max-width:45%;font-size:10px}}
+
+/* Compact, optional methodology note: original map layout remains unchanged. */
+.map-methods {position:relative; margin-top:5px; padding-top:4px; border-top:1px solid rgba(75,129,162,.26)}
+.map-methods summary {cursor:pointer; list-style:none; user-select:none; color:#7ec8e3; font-size:10px; line-height:1.65; white-space:nowrap}
+.map-methods summary::-webkit-details-marker {display:none}
+.map-methods summary:hover,.map-methods summary:focus-visible {color:#b6eaff}
+.map-methods-text {position:absolute; left:0; bottom:calc(100% + 10px); width:355px; max-width:calc(100vw - 30px); padding:13px 15px; border:1px solid #2a5a80; border-radius:7px; background:rgba(9,22,37,.98); box-shadow:0 8px 28px rgba(0,0,0,.55); color:#b9cfdf; line-height:1.55; font-size:11px; z-index:250}
+.map-methods-text strong {display:block; margin-bottom:7px; font-size:12px; color:#7ec8e3}
+.map-methods-text p {margin:0 0 8px}
+.map-methods-text p:last-child {margin-bottom:0}
+.map-methods-text b {font-weight:650; color:#e2edf7}
+.map-methods-note {color:#7f9db3; font-size:10px}
+@media(max-width:560px){.map-methods-text {left:-120px; width:calc(100vw - 20px)}}
 </style>
 </head>
 <body>
@@ -289,7 +302,7 @@ canvas.netcanvas { width:100%; height:100%; }
   </div>
   <div class="stats">
     <div class="stat"><div class="n">1,972</div><div class="l">Papers</div></div>
-    <div class="stat"><div class="n">55</div><div class="l">Keywords</div></div>
+    <div class="stat"><div class="n">54</div><div class="l">Keywords</div></div>
     <div class="stat"><div class="n">16</div><div class="l">Clusters</div></div>
     <div class="stat"><div class="n">2017&#x2013;2026</div><div class="l">Years</div></div>
   </div>
@@ -406,6 +419,18 @@ canvas.netcanvas { width:100%; height:100%; }
   <div class="leg-row"><div style="width:8px;height:8px;border-radius:50%;background:#4fc3f7"></div> Node size = frequency</div>
   <div class="leg-row"><div style="width:18px;height:2px;background:rgba(79,195,247,0.6)"></div> Edge width = co-occurrence</div>
   <div class="leg-row"><div style="width:8px;height:8px;border-radius:50%;background:#ffb300"></div> Color = cluster</div>
+  <details class="map-methods" id="map-methods">
+    <summary aria-label="How this knowledge map was created">ⓘ How this map works</summary>
+    <div class="map-methods-text">
+      <strong>About this knowledge map</strong>
+      <p>This is a curated keyword co-occurrence map of ABCD-related publications, using <b>54 predefined keywords</b> grouped into <b>16 predefined research themes</b>.</p>
+      <p><b>Nodes</b> represent assigned keywords; their size reflects the number of tagged papers. <b>Links</b> connect keywords assigned to the same publication, and their thickness reflects the number of papers containing both labels.</p>
+      <p>To keep the map readable, it shows the strongest connections and includes additional links for otherwise isolated terms. Some publications have no assigned keyword.</p>
+      <p class="map-methods-note">These are curated research labels, not necessarily the original authors’ keywords.</p>
+      <p class="map-methods-note">Publication records are based on the <a href="https://abcdstudy.org/research-publications/" target="_blank" rel="noopener noreferrer">ABCD Study Research Publications</a> list. Literature data snapshot: November 12, 2026.</p>
+      <p class="map-methods-note"><em>This visualization is intended for literature exploration rather than formal bibliometric analysis.</em></p>
+    </div>
+  </details>
 </div>
 <div id="info-bar">Drag to pan &#xB7; Scroll to zoom &#xB7; Click nodes</div>
 <script>
@@ -483,9 +508,25 @@ const clusters = DATA.C.map(c => ({name:c[0],color:c[1],count:
 const clusterMap = Object.fromEntries(DATA.K.map(k=>[k[0],TOPIC_NAMES[k[1]]]));
 const getColor = id => clusterColorMap[clusterMap[id]] || '#78909c';
 const rawNodes = sortEntries(keywordCounts).map(([id,count])=>({id,count}));
-const rawEdges = sortEntries(kwPairs).slice(0,125).map(([pair,w])=>{
-  const [s,t]=pair.split('\u0000');return {s,t,w};
-});
+// Keep the 125 strongest keyword co-occurrences, but do not leave valid
+// lower-frequency themes disconnected merely because their edges rank lower.
+// For nodes with no top-125 connections, add their two most frequent
+// paper-level co-occurrences (no invented links or artificial weights).
+const rawEdges = (() => {
+  const sortedPairs=sortEntries(kwPairs);
+  const selected=new Map(sortedPairs.slice(0,125));
+  const connected=new Set();
+  selected.forEach((w,pair) => pair.split('\u0000').forEach(k=>connected.add(k)));
+  const uncovered=DATA.K.map(k=>k[0]).filter(k=>!connected.has(k));
+  for(const keyword of uncovered){
+    const neighbors=sortedPairs.filter(([pair])=>pair.split('\u0000').includes(keyword));
+    neighbors.slice(0,2).forEach(([pair,w])=>selected.set(pair,w));
+  }
+  return Array.from(selected,([pair,w])=>{
+    const [s,t]=pair.split('\u0000');
+    return {s,t,w,isSupplemental:!sortedPairs.slice(0,125).some(([k])=>k===pair)};
+  });
+})();
 const clusterNodes = Object.fromEntries(TOPIC_NAMES.map(c => [c,rawNodes.filter(n => clusterMap[n.id]===c).map(n => n.id)]));
 const kwJournals = Object.fromEntries(DATA.K.map(k=>[k[0],Object.fromEntries(sortEntries(kwJournalsRaw[k[0]]).slice(0,12))]));
 TOPIC_NAMES.forEach(c => { clusterTopJournals[c]=sortEntries(clusterJCounts[c]).slice(0,12); });
@@ -1367,8 +1408,8 @@ function drawNet(){
     const a=nodeMap[e.s],b=nodeMap[e.t];
     const isH=hoveredNode&&(hoveredNode.id===e.s||hoveredNode.id===e.t);
     const strength=Math.sqrt(e.w/maxEdgeWeight); // stronger shared-publication links are more visible
-    const al=isH?0.77:(0.10+0.31*strength);
-    const w=isH?(1.05+1.45*strength):(0.30+1.30*Math.pow(e.w/maxEdgeWeight,0.65));
+    const al=isH?0.77:(e.isSupplemental?Math.max(0.23,0.10+0.31*strength):(0.10+0.31*strength));
+    const w=isH?(1.05+1.45*strength):(e.isSupplemental?Math.max(0.60,0.30+1.30*Math.pow(e.w/maxEdgeWeight,0.65)):(0.30+1.30*Math.pow(e.w/maxEdgeWeight,0.65)));
     ctx.beginPath();ctx.moveTo(a.x,a.y);
     const mx2=(a.x+b.x)/2+(b.y-a.y)*0.15,my2=(a.y+b.y)/2-(b.x-a.x)*0.15;
     ctx.quadraticCurveTo(mx2,my2,b.x,b.y);
