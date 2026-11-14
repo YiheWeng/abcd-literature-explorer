@@ -292,6 +292,12 @@ canvas.netcanvas { width:100%; height:100%; }
 .map-methods-text b {font-weight:650; color:#e2edf7}
 .map-methods-note {color:#7f9db3; font-size:10px}
 @media(max-width:560px){.map-methods-text {left:-120px; width:calc(100vw - 20px)}}
+
+/* Journal detail: optional zoom controls, the original layout and appearance stay untouched at 100%. */
+.journal-zoom-controls{position:absolute;left:12px;top:38px;z-index:60;display:flex;gap:4px;padding:3px;background:rgba(8,13,24,.72);border:1px solid #1e3d5c;border-radius:6px}
+.journal-zoom-controls button{color:#91b8ce;background:#102033;border:1px solid #264661;border-radius:4px;font:600 11px 'Segoe UI',Arial,sans-serif;min-width:27px;height:24px;padding:0 5px;cursor:pointer}
+.journal-zoom-controls button:hover,.journal-zoom-controls button:focus-visible{color:#4fc3f7;border-color:#4fc3f7}
+.journal-zoom-controls #journal-zoom-reset{min-width:41px;font-size:9px}
 </style>
 </head>
 <body>
@@ -366,7 +372,12 @@ canvas.netcanvas { width:100%; height:100%; }
   <div class="explorer-header"><button class="back-btn" id="back-journals" onclick="backTo('journals')">&#x2190; Back</button><div><div class="explorer-title" id="title-journals">Top Journals</div><div class="explorer-subtitle" id="sub-journals">Click any journal to explore its research area breakdown &amp; growth</div></div></div>
   <div class="card-grid" id="grid-journals"></div>
   <div class="detail-panel" id="detail-journals">
-  <div class="detail-canvas-wrap"><canvas class="detail-canvas-full" id="dj-canvas"></canvas><div class="detail-tooltip" id="dj-tooltip"></div></div>
+  <div class="detail-canvas-wrap"><canvas class="detail-canvas-full" id="dj-canvas"></canvas><div class="detail-tooltip" id="dj-tooltip"></div>
+      <div class="journal-zoom-controls" aria-label="Journal bubble map zoom">
+        <button type="button" onclick="changeJournalZoom(-1)" title="Zoom out" aria-label="Zoom out">−</button>
+        <button type="button" onclick="changeJournalZoom(0)" title="Reset to original size" aria-label="Reset zoom" id="journal-zoom-reset">100%</button>
+        <button type="button" onclick="changeJournalZoom(1)" title="Zoom in" aria-label="Zoom in">+</button>
+      </div></div>
   <div class="papers-panel" id="pp-journals">
     <div class="papers-panel-header">
       <div class="papers-panel-title" id="pp-journals-title">Papers in Journal</div>
@@ -1252,7 +1263,20 @@ function openKeywordDetail(name){
 }
 
 // JOURNAL DETAIL
-function openJournalDetail(name){
+let journalCurrentName=null;
+let journalZoom=1;
+function changeJournalZoom(direction){
+  if(!journalCurrentName)return;
+  const next=direction===0?1:Math.max(.55,Math.min(1.75,Math.round((journalZoom+(direction>0?.15:-.15))*100)/100));
+  if(next===journalZoom)return;
+  journalZoom=next;
+  openJournalDetail(journalCurrentName,true);
+}
+function openJournalDetail(name,keepZoom=false){
+  if(!keepZoom||journalCurrentName!==name)journalZoom=1;
+  journalCurrentName=name;
+  const zoomControl=document.getElementById('journal-zoom-reset');
+  if(zoomControl)zoomControl.textContent=Math.round(journalZoom*100)+'%';
   var allJ = (typeof allJournalsData !== 'undefined') ? allJournalsData : [];
   var jobj = allJ.find(function(j){return j.name===name;});
   var data = jobj || journalData[name];
@@ -1304,6 +1328,13 @@ function openJournalDetail(name){
       if(i>0){const b=bubbles[i];b.x=Math.max(b.r+6,Math.min(bubbleW-b.r-6,b.x));b.y=Math.max(b.r+6,Math.min(H-b.r-6,b.y));}
     }
   }
+  // All bubble positions are identical to the original code at 100%.
+  // Only apply scaling when the viewer explicitly uses +/-.
+  ctx.save();
+  if(journalZoom!==1){
+    ctx.beginPath();ctx.rect(0,0,bubbleW,H);ctx.clip();
+    ctx.translate(cX,cY);ctx.scale(journalZoom,journalZoom);ctx.translate(-cX,-cY);
+  }
   const center=bubbles[0];
   for(let i=1;i<bubbles.length;i++){
     const b=bubbles[i],pct=b.count/maxVal;
@@ -1324,13 +1355,15 @@ function openJournalDetail(name){
     else ctx.fillText(b.topic,b.x,b.y);
     if(b.r>22){ctx.font=`500 ${Math.max(8,fs-2)}px Segoe UI`;ctx.fillStyle=b.color+'bb';ctx.fillText(b.count,b.x,b.y+(parts.length>1?fs*1.7:fs*1.2));}
   });
+  ctx.restore();
   ctx.font='700 11px Segoe UI';ctx.fillStyle='#4fc3f7';ctx.textAlign='center';ctx.fillText('Research Area Distribution',cX,22);
   const topColor=topicColors[topics[0][0]]||'#4fc3f7';
   drawYearTrend(ctx,trendW,H,bubbleW,yearMap,topColor,'Publications per Year');
   const djTt=document.getElementById('dj-tooltip');
   canvas.onmousemove=e=>{
     const rect=canvas.getBoundingClientRect();
-    const mx=(e.clientX-rect.left)*(canvas.width/rect.width),my=(e.clientY-rect.top)*(canvas.height/rect.height);
+    let mx=(e.clientX-rect.left)*(canvas.width/rect.width),my=(e.clientY-rect.top)*(canvas.height/rect.height);
+    if(journalZoom!==1){mx=cX+(mx-cX)/journalZoom;my=cY+(my-cY)/journalZoom;}
     let found=null;
     bubbles.forEach(b=>{const dx=mx-b.x,dy=my-b.y;if(Math.sqrt(dx*dx+dy*dy)<b.r)found=b;});
     if(found){djTt.style.display='block';djTt.style.left=(e.offsetX+14)+'px';djTt.style.top=(e.offsetY-40)+'px';
