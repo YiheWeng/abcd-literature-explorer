@@ -302,6 +302,26 @@ canvas.netcanvas { width:100%; height:100%; }
 /* Keep keyword and journal year-axis labels clear of the paper list. */
 #detail-keywords .papers-panel,
 #detail-journals .papers-panel { height:42%; }
+
+/* Paper reading mode: expand the existing list without changing the visualization design. */
+.paper-view-toggle {
+  flex-shrink:0; white-space:nowrap; border:1px solid #2a5a80;
+  background:#102b40; color:#95d9f7; border-radius:5px;
+  padding:5px 10px; font:600 10px 'Segoe UI',Arial,sans-serif;
+  cursor:pointer; transition:background .15s,border-color .15s;
+}
+.paper-view-toggle:hover,.paper-view-toggle:focus-visible {background:#174361;border-color:#4fc3f7;color:#d6f5ff;}
+.detail-panel.papers-expanded .detail-canvas-wrap {display:none!important;}
+.detail-panel.papers-expanded .papers-panel {
+  height:100%!important; top:0; border-top:0;
+}
+.detail-panel.papers-expanded .papers-list {overscroll-behavior:contain;}
+@media(max-width:850px) {
+  .paper-view-toggle {padding:5px 6px;font-size:9px;}
+  .papers-panel-header{gap:6px;flex-wrap:wrap;}
+  .papers-panel-title{min-width:100px;}
+  .papers-search {width:150px;min-width:90px;}
+}
 </style>
 </head>
 <body>
@@ -352,6 +372,7 @@ canvas.netcanvas { width:100%; height:100%; }
       <div class="papers-panel-count" id="pp-clusters-count"></div>
       <select id="pp-clusters-year" style="background:#0d1b2a;border:1px solid #1e3d5c;color:#7ec8e3;padding:3px 6px;border-radius:4px;font-size:10px;outline:none" onchange="filterPapers('clusters')"><option value="">All years</option></select>
       <input class="papers-search" id="pp-clusters-search" placeholder="&#x1F50D; Search papers..." oninput="filterPapers('clusters')">
+      <button class="paper-view-toggle" type="button" id="paper-view-toggle-clusters" onclick="togglePaperView('clusters')" aria-pressed="false" title="Expand the paper list and hide the charts">▴ Expand papers</button>
     </div>
     <div class="papers-list" id="pp-clusters-list"></div>
   </div>
@@ -367,6 +388,7 @@ canvas.netcanvas { width:100%; height:100%; }
       <div class="papers-panel-title" id="pp-keywords-title">Papers with Keyword</div>
       <div class="papers-panel-count" id="pp-keywords-count"></div>
       <input class="papers-search" id="pp-keywords-search" placeholder="&#x1F50D; Search papers..." oninput="filterPapers('keywords')">
+      <button class="paper-view-toggle" type="button" id="paper-view-toggle-keywords" onclick="togglePaperView('keywords')" aria-pressed="false" title="Expand the paper list and hide the charts">▴ Expand papers</button>
     </div>
     <div class="papers-list" id="pp-keywords-list"></div>
   </div>
@@ -390,6 +412,7 @@ canvas.netcanvas { width:100%; height:100%; }
       <select id="pp-journals-filter" style="background:#0d1b2a;border:1px solid #1e3d5c;color:#c8dde8;padding:3px 6px;border-radius:4px;font-size:10px;outline:none" onchange="filterPapers('journals')">
         <option value="">All clusters</option>
       </select>
+      <button class="paper-view-toggle" type="button" id="paper-view-toggle-journals" onclick="togglePaperView('journals')" aria-pressed="false" title="Expand the paper list and hide the charts">▴ Expand papers</button>
     </div>
     <div class="papers-list" id="pp-journals-list"></div>
   </div>
@@ -786,6 +809,7 @@ function onJournalClusterFilter(val) { _journalClusterFilter = val; buildJournal
 function onJournalSort(val) { _journalSortBy = val; buildJournalGrid(); }
 
 function backTo(tab){
+  if(tab==='clusters'||tab==='keywords'||tab==='journals')setPaperView(tab,false);
   document.getElementById('grid-'+tab).style.display='grid'; if(tab==='journals'){buildJournalGrid();}
   document.getElementById('detail-'+tab).style.display='none';
   document.getElementById('back-'+tab).style.display='none';
@@ -1009,6 +1033,7 @@ function drawYearBars(ctx,W,H,yr,color,title){
 
 // CLUSTER DETAIL
 function openClusterDetail(name){
+  setPaperView('clusters',false);
   const c=clusters.find(x=>x.name===name);if(!c)return;
   document.getElementById('grid-clusters').style.display='none';
   document.getElementById('detail-clusters').style.display='block';
@@ -1280,6 +1305,7 @@ var KW_VOCAB = [
 ];
 
 function openKeywordDetail(name){
+  setPaperView('keywords',false);
   document.getElementById('grid-keywords').style.display='none';
   document.getElementById('detail-keywords').style.display='block';
   document.getElementById('back-keywords').style.display='inline-block';
@@ -1318,6 +1344,7 @@ function changeJournalZoom(direction){
   openJournalDetail(journalCurrentName,true);
 }
 function openJournalDetail(name,keepZoom=false){
+  if(!keepZoom)setPaperView('journals',false);
   if(!keepZoom||journalCurrentName!==name)journalZoom=1;
   journalCurrentName=name;
   const zoomControl=document.getElementById('journal-zoom-reset');
@@ -1649,6 +1676,21 @@ var CSV_CLUSTER_PATS = [
   {name:'Family & Parenting',   color:'#ff7043', pats:[/parenting.style|parental.behav|parental.monitor/i,/family.conflict|family.stress/i,/parent.child.relat/i,/adverse.family/i]},
 ];
 
+
+// One-click reading mode for Cluster, Keyword and Journal paper lists.
+function setPaperView(tab,expanded){
+  const detail=document.getElementById('detail-'+tab);
+  const btn=document.getElementById('paper-view-toggle-'+tab);
+  if(!detail||!btn)return;
+  detail.classList.toggle('papers-expanded',Boolean(expanded));
+  btn.textContent=expanded?'▾ Show charts':'▴ Expand papers';
+  btn.setAttribute('aria-pressed',String(Boolean(expanded)));
+  btn.title=expanded?'Restore the original charts and paper list layout':'Expand the paper list and hide the charts';
+}
+function togglePaperView(tab){
+  const detail=document.getElementById('detail-'+tab);
+  if(detail)setPaperView(tab,!detail.classList.contains('papers-expanded'));
+}
 
 var _ppState = {clusters:{kw:'',papers:[]}, keywords:{kw:'',papers:[]}, journals:{kw:'',cluster:'',papers:[]}};
 function setPapers(tab,list){_ppState[tab].papers=list;filterPapers(tab);}
